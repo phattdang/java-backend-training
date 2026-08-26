@@ -1,0 +1,31 @@
+- Spring Cache: Dùng @Cacheable và @CachePut để cache member và tránh stale cache khi update.
+(đã dung Bruno test để so sánh lần 1 và lần 2 khi call api)
+
+- WebClient error handling: Xử lý riêng lỗi 404, các 4xx, 5xx, timeout và connection/network error.
+
+- Kafka typed deserialization: Dùng custom ConsumerFactory<String, InputEvent> với JacksonJsonDeserializer.
+(mỗi value object event giờ sẽ có factory để deserialize riêng, không set default type như trước nữa)
+ 
+- Kafka typed serialization: Dùng custom ProducerFactory<String, OutputEvent> với JacksonJsonSerializer.
+(tương tự với consumer factory, mình cũng custom 1 producer factory để desialize cho message)
+
+- Dùng ErrorHandlingDeserializer để xử lý lỗi deserialize trước listener và tránh kẹt ở poison message.
+(các message sai format hoặc đại loại thế có thể khiến deserialize bị lỗi, khiến loop ở consume message, them cái này để nó ném lỗi cho default handler xử lý, lỗi này đã mặc iịnh được non retryable)
+
+- Retry classification: Phân loại exception retryable và non-retryable trong DefaultErrorHandler.
+
+- Consumer exception handling: Exception từ listener được DefaultErrorHandler bắt và retry theo FixedBackOff.
+
+- Dead Letter Topic: Dùng DeadLetterPublishingRecoverer để đẩy message sang DLT khi không thể xử lý sau retry.
+(mình tạo 1 cái topic riêng để chứa mấy cái message bị lỗi của topic chính, để kiểu quản lý hoặc thăm dò lỗi sau này, nếu có thể chắc sẽ consume lại các message lỗi này sau)
+
+- Infinite retry protection: Giới hạn số lần retry để tránh poison message bị xử lý vô hạn.
+(cũng cấu hình trong FixedBackOff để giới hạn số lần retry trước khi mình publish nó lên DLT hoặc kệ nó luôn)
+
+- Producer send failure: Dùng .join() để producer failure bubble về listener và tận dụng lại DefaultErrorHandler.
+(kiểu mình block thread listerer lại chờ đến khi nào mình produce cái message được lên topic 2 thì cái message mình consume từ topic mới được tính là thành công, chủ yếu để mình tái sử dung cái Default handler của kafka listener, retry rồi publish DLT...)
+
+- Record vs Batch Listener: Service A dùng record listener, Delivery Service dùng batch listener.
+
+đã tìm hiểu nhưng chưa thực hành
+At-least-once / duplicate: Hiểu rủi ro retry làm xử lý trùng và hướng xử lý bằng eventId + idempotent consumer.
