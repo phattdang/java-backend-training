@@ -1,0 +1,342 @@
+openapi: 3.0.3
+info:
+  title: P02 - JPA Entity Life Cycle API
+  version: 1.0.0
+  description: APIs for practicing JPA entity lifecycle and EntityManager operations.
+
+servers:
+  - url: http://localhost:8083
+    description: Local development server
+
+tags:
+  - name: Users
+  - name: Entity Lifecycle
+  - name: Persistence Context
+  - name: Dirty Checking and Flush
+  - name: EntityManager
+
+paths:
+  /practice/users:
+    post:
+      tags: [Users]
+      summary: Create a user using Spring Data repository
+      operationId: createUser
+      requestBody:
+        $ref: '#/components/requestBodies/CreateUser'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /practice/users/{id}:
+    get:
+      tags: [Users]
+      summary: Find a user using Spring Data repository
+      operationId: findUser
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: User found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /practice/lifecycle/transient:
+    post:
+      tags: [Entity Lifecycle]
+      summary: Demonstrate the transient state
+      operationId: transientState
+      responses:
+        '200':
+          $ref: '#/components/responses/LifecycleStateResult'
+
+  /practice/lifecycle/managed/{id}:
+    post:
+      tags: [Entity Lifecycle]
+      summary: Demonstrate the managed state
+      operationId: managedState
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          $ref: '#/components/responses/LifecycleStateResult'
+
+  /practice/lifecycle/detached/{id}:
+    post:
+      tags: [Entity Lifecycle]
+      summary: Demonstrate the detached state
+      operationId: detachedState
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        $ref: '#/components/requestBodies/UpdateUserName'
+      responses:
+        '200':
+          $ref: '#/components/responses/LifecycleStateResult'
+
+  /practice/lifecycle/removed/{id}:
+    post:
+      tags: [Entity Lifecycle]
+      summary: Demonstrate the removed state
+      description: Deletes the selected user. Create a disposable user before calling this request.
+      operationId: removedState
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          $ref: '#/components/responses/LifecycleStateResult'
+
+  /practice/context/managed/{id}:
+    get:
+      tags: [Persistence Context]
+      summary: Check whether an entity is managed by the persistence context
+      operationId: managedByPersistenceContext
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          $ref: '#/components/responses/LifecycleStateResult'
+
+  /practice/context/first-level-cache/{id}:
+    get:
+      tags: [Persistence Context]
+      summary: Demonstrate the first-level cache
+      operationId: firstLevelCache
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          $ref: '#/components/responses/PersistenceContextResult'
+
+  /practice/context/identity/{id}:
+    get:
+      tags: [Persistence Context]
+      summary: Demonstrate entity identity in one persistence context
+      operationId: entityIdentity
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          $ref: '#/components/responses/PersistenceContextResult'
+
+  /practice/context/clear/{id}:
+    post:
+      tags: [Persistence Context]
+      summary: Clear the persistence context and detach its entities
+      operationId: clearPersistenceContext
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          $ref: '#/components/responses/LifecycleStateResult'
+
+  /practice/dirty-checking/{id}:
+    put:
+      tags: [Dirty Checking and Flush]
+      summary: Update a managed entity using dirty checking
+      operationId: dirtyChecking
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        $ref: '#/components/requestBodies/UpdateUserName'
+      responses:
+        '200':
+          description: Dirty-checking demonstration result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResult'
+
+  /practice/flush/{id}:
+    post:
+      tags: [Dirty Checking and Flush]
+      summary: Update an entity and explicitly flush the persistence context
+      operationId: flush
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        $ref: '#/components/requestBodies/UpdateUserName'
+      responses:
+        '200':
+          description: Flush demonstration result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResult'
+
+  /practice/entity-manager/persist:
+    post:
+      tags: [EntityManager]
+      summary: Create a user with EntityManager.persist
+      operationId: persist
+      requestBody:
+        $ref: '#/components/requestBodies/CreateUser'
+      responses:
+        '201':
+          $ref: '#/components/responses/EntityManagerOperationResult'
+
+  /practice/entity-manager/merge/{id}:
+    post:
+      tags: [EntityManager]
+      summary: Update a detached entity with EntityManager.merge
+      operationId: merge
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        $ref: '#/components/requestBodies/UpdateUserName'
+      responses:
+        '200':
+          $ref: '#/components/responses/EntityManagerOperationResult'
+
+  /practice/entity-manager/remove/{id}:
+    post:
+      tags: [EntityManager]
+      summary: Delete an entity with EntityManager.remove
+      description: Deletes the selected user. Create a disposable user before calling this request.
+      operationId: remove
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          $ref: '#/components/responses/EntityManagerOperationResult'
+
+  /practice/entity-manager/find/{id}:
+    get:
+      tags: [EntityManager]
+      summary: Find an entity with EntityManager.find
+      operationId: find
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: EntityManager.find demonstration result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResult'
+
+  /practice/entity-manager/reference/{id}:
+    get:
+      tags: [EntityManager]
+      summary: Load a lazy reference with EntityManager.getReference
+      operationId: reference
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: EntityManager.getReference demonstration result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResult'
+
+  /practice/entity-manager/compare/{id}:
+    get:
+      tags: [EntityManager]
+      summary: Compare repository and EntityManager identity
+      operationId: compareRepositoryAndEntityManager
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          $ref: '#/components/responses/PersistenceContextResult'
+
+components:
+  parameters:
+    UserId:
+      name: id
+      in: path
+      required: true
+      description: Existing user ID
+      schema:
+        type: integer
+        format: int64
+        example: 1
+
+  requestBodies:
+    CreateUser:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CreateUserRequest'
+          example:
+            name: Phat Dang
+            email: phat.dang@example.com
+    UpdateUserName:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UpdateUserNameRequest'
+          example:
+            name: Phat Dang Updated
+
+  responses:
+    LifecycleStateResult:
+      description: Entity lifecycle demonstration result
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/GenericResult'
+    PersistenceContextResult:
+      description: Persistence context demonstration result
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/GenericResult'
+    EntityManagerOperationResult:
+      description: EntityManager operation result
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/GenericResult'
+
+  schemas:
+    CreateUserRequest:
+      type: object
+      required: [name, email]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          example: Phat Dang
+        email:
+          type: string
+          format: email
+          maxLength: 150
+          example: phat.dang@example.com
+
+    UpdateUserNameRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          example: Phat Dang Updated
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        name:
+          type: string
+          example: Phat Dang
+        email:
+          type: string
+          format: email
+          example: phat.dang@example.com
+
+    GenericResult:
+      type: object
+      description: Response fields vary by the JPA concept being demonstrated.
+      additionalProperties: true

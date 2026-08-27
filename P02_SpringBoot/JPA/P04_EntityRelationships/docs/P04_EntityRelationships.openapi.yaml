@@ -1,0 +1,667 @@
+openapi: 3.0.3
+info:
+  title: P04 - Entity Relationships Practice API
+  version: 1.0.0
+  description: API laboratory for Part 7 - JPA Entity Relationships.
+
+servers:
+  - url: http://localhost:8085
+    description: Local P04 server
+
+tags:
+  - name: Department Employee
+    description: One-to-Many, Many-to-One, owning/inverse sides, FK, and helper methods.
+  - name: User Profile
+    description: Bidirectional One-to-One with profiles.user_id as a unique FK.
+  - name: Student Course
+    description: Direct Many-to-Many using the student_courses join table.
+  - name: Enrollment
+    description: Intermediate entity replacing Many-to-Many when the relationship has business fields.
+
+paths:
+  /practice/departments:
+    post:
+      tags: [Department Employee]
+      summary: Create a department
+      description: Creates the parent for the Department 1-N Employee scenario.
+      operationId: createDepartment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDepartmentRequest'
+            example:
+              name: Engineering
+      responses:
+        '201':
+          description: Department created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /practice/departments/{departmentId}/employees:
+    post:
+      tags: [Department Employee]
+      summary: Create an employee through the owning side
+      description: Employee.department controls the employees.department_id foreign key.
+      operationId: createEmployee
+      parameters:
+        - $ref: '#/components/parameters/DepartmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEmployeeRequest'
+            example:
+              name: Owning Side Employee
+      responses:
+        '201':
+          description: Employee created and associated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /practice/departments/{departmentId}/employees/helper:
+    post:
+      tags: [Department Employee]
+      summary: Create an employee using Department.addEmployee()
+      description: Synchronizes both Java references, then explicitly saves the owning Employee side.
+      operationId: createEmployeeWithHelper
+      parameters:
+        - $ref: '#/components/parameters/DepartmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEmployeeRequest'
+            example:
+              name: Helper Employee
+      responses:
+        '201':
+          description: Employee created using the helper method
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /practice/departments/{departmentId}/employees/{employeeId}/helper:
+    delete:
+      tags: [Department Employee]
+      summary: Remove an employee relationship using Department.removeEmployee()
+      description: Clears both Java references and persists a null employees.department_id on the owning side.
+      operationId: removeEmployeeWithHelper
+      parameters:
+        - $ref: '#/components/parameters/DepartmentId'
+        - $ref: '#/components/parameters/EmployeeId'
+      responses:
+        '200':
+          description: Relationship removed; the employee itself still exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeResponse'
+        '400':
+          description: Employee does not belong to the supplied department
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /practice/departments/{departmentId}:
+    get:
+      tags: [Department Employee]
+      summary: Read a department and its employees
+      description: Reads the inverse Department.employees field mapped by Employee.department.
+      operationId: findDepartment
+      parameters:
+        - $ref: '#/components/parameters/DepartmentId'
+      responses:
+        '200':
+          description: Department DTO with non-recursive employee DTOs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /practice/employees/{employeeId}:
+    get:
+      tags: [Department Employee]
+      summary: Read an employee and its department ID
+      description: Reads Employee.department from the owning side without returning recursive entities.
+      operationId: findEmployee
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+      responses:
+        '200':
+          description: Employee DTO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /practice/users:
+    post:
+      tags: [User Profile]
+      summary: Create a user
+      description: Creates the inverse entity for the User 1-1 Profile scenario.
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+            example:
+              name: Relationship User
+      responses:
+        '201':
+          description: User created without a profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /practice/users/{userId}/profile:
+    post:
+      tags: [User Profile]
+      summary: Create and attach a one-to-one profile
+      description: Profile owns profiles.user_id; the helper synchronizes Profile.user and User.profile.
+      operationId: createProfile
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProfileRequest'
+            example:
+              bio: Learning bidirectional One-to-One mapping
+      responses:
+        '201':
+          description: Profile created and attached
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The user already has a profile
+
+  /practice/users/{userId}:
+    get:
+      tags: [User Profile]
+      summary: Read a user and profile DTO
+      description: Reads the inverse User.profile side without returning a recursive entity graph.
+      operationId: findUserWithProfile
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: User and optional profile data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /practice/students:
+    post:
+      tags: [Student Course]
+      summary: Create a student
+      description: Creates the owning entity for the direct Many-to-Many scenario.
+      operationId: createStudent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStudentRequest'
+            example:
+              name: Many-to-Many Student
+      responses:
+        '201':
+          description: Student created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /practice/courses:
+    post:
+      tags: [Student Course]
+      summary: Create a course
+      description: Creates the inverse entity for the direct Many-to-Many scenario.
+      operationId: createCourse
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCourseRequest'
+            example:
+              title: JPA Entity Relationships
+      responses:
+        '201':
+          description: Course created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /practice/students/{studentId}/courses/{courseId}:
+    post:
+      tags: [Student Course]
+      summary: Associate a student and course through the join table
+      description: Student owns @JoinTable; this inserts a student_courses row and synchronizes both Java sets.
+      operationId: addCourse
+      parameters:
+        - $ref: '#/components/parameters/StudentId'
+        - $ref: '#/components/parameters/CourseId'
+      responses:
+        '200':
+          description: Student DTO containing the associated course ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /practice/students/{studentId}:
+    get:
+      tags: [Student Course]
+      summary: Read a student and associated course IDs
+      description: Returns IDs rather than a recursive Student-Course entity graph.
+      operationId: findStudentWithCourses
+      parameters:
+        - $ref: '#/components/parameters/StudentId'
+      responses:
+        '200':
+          description: Student DTO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /practice/enrollment-students:
+    post:
+      tags: [Enrollment]
+      summary: Create an enrollment student
+      description: Creates a student for the isolated intermediate-entity scenario.
+      operationId: createEnrollmentStudent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEnrollmentStudentRequest'
+            example:
+              name: Enrollment Student
+      responses:
+        '201':
+          description: Enrollment student created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnrollmentPartyResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /practice/enrollment-courses:
+    post:
+      tags: [Enrollment]
+      summary: Create an enrollment course
+      description: Creates a course for the isolated intermediate-entity scenario.
+      operationId: createEnrollmentCourse
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEnrollmentCourseRequest'
+            example:
+              title: Relationship Modeling
+      responses:
+        '201':
+          description: Enrollment course created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnrollmentPartyResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /practice/enrollments:
+    post:
+      tags: [Enrollment]
+      summary: Create an intermediate Enrollment entity
+      description: Replaces direct Many-to-Many with two FKs plus enrolledAt, status, and grade.
+      operationId: createEnrollment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEnrollmentRequest'
+            example:
+              studentId: 1
+              courseId: 1
+              status: ACTIVE
+              grade: A
+      responses:
+        '201':
+          description: Enrollment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnrollmentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /practice/enrollments/{enrollmentId}:
+    get:
+      tags: [Enrollment]
+      summary: Read an intermediate Enrollment entity as a DTO
+      description: Shows both relationship IDs and the relationship's business fields.
+      operationId: findEnrollment
+      parameters:
+        - $ref: '#/components/parameters/EnrollmentId'
+      responses:
+        '200':
+          description: Enrollment DTO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnrollmentResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    DepartmentId:
+      name: departmentId
+      in: path
+      required: true
+      description: Existing department ID
+      schema:
+        type: integer
+        format: int64
+        example: 1
+    EmployeeId:
+      name: employeeId
+      in: path
+      required: true
+      description: Existing employee ID
+      schema:
+        type: integer
+        format: int64
+        example: 1
+    UserId:
+      name: userId
+      in: path
+      required: true
+      description: Existing user ID
+      schema:
+        type: integer
+        format: int64
+        example: 1
+    StudentId:
+      name: studentId
+      in: path
+      required: true
+      description: Existing direct Many-to-Many student ID
+      schema:
+        type: integer
+        format: int64
+        example: 1
+    CourseId:
+      name: courseId
+      in: path
+      required: true
+      description: Existing direct Many-to-Many course ID
+      schema:
+        type: integer
+        format: int64
+        example: 1
+    EnrollmentId:
+      name: enrollmentId
+      in: path
+      required: true
+      description: Existing enrollment ID
+      schema:
+        type: integer
+        format: int64
+        example: 1
+
+  responses:
+    BadRequest:
+      description: Request validation failed
+    NotFound:
+      description: Referenced entity was not found
+
+  schemas:
+    CreateDepartmentRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+
+    CreateEmployeeRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+
+    EmployeeResponse:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        departmentId:
+          type: integer
+          format: int64
+          nullable: true
+
+    DepartmentResponse:
+      type: object
+      required: [id, name, employees]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        employees:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmployeeResponse'
+
+    CreateUserRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+
+    CreateProfileRequest:
+      type: object
+      required: [bio]
+      properties:
+        bio:
+          type: string
+          maxLength: 255
+
+    UserProfileResponse:
+      type: object
+      required: [userId, userName]
+      properties:
+        userId:
+          type: integer
+          format: int64
+        userName:
+          type: string
+        profileId:
+          type: integer
+          format: int64
+          nullable: true
+        bio:
+          type: string
+          nullable: true
+
+    CreateStudentRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+
+    CreateCourseRequest:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          maxLength: 100
+
+    CourseResponse:
+      type: object
+      required: [id, title]
+      properties:
+        id:
+          type: integer
+          format: int64
+        title:
+          type: string
+
+    StudentResponse:
+      type: object
+      required: [id, name, courseIds]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        courseIds:
+          type: array
+          uniqueItems: true
+          items:
+            type: integer
+            format: int64
+
+    CreateEnrollmentStudentRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+
+    CreateEnrollmentCourseRequest:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          maxLength: 100
+
+    EnrollmentPartyResponse:
+      type: object
+      required: [id, value]
+      properties:
+        id:
+          type: integer
+          format: int64
+        value:
+          type: string
+
+    CreateEnrollmentRequest:
+      type: object
+      required: [studentId, courseId, status]
+      properties:
+        studentId:
+          type: integer
+          format: int64
+          example: 1
+        courseId:
+          type: integer
+          format: int64
+          example: 1
+        enrolledAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Optional; the server uses the current time when omitted.
+        status:
+          type: string
+          maxLength: 30
+          example: ACTIVE
+        grade:
+          type: string
+          maxLength: 10
+          nullable: true
+          example: A
+
+    EnrollmentResponse:
+      type: object
+      required: [id, studentId, courseId, enrolledAt, status]
+      properties:
+        id:
+          type: integer
+          format: int64
+        studentId:
+          type: integer
+          format: int64
+        courseId:
+          type: integer
+          format: int64
+        enrolledAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+        grade:
+          type: string
+          nullable: true

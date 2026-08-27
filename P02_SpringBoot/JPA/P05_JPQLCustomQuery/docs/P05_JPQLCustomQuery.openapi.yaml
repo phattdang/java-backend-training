@@ -1,0 +1,518 @@
+openapi: 3.0.3
+info:
+  title: P05 - JPQL & Custom Query Practice API
+  version: 1.0.0
+  description: API laboratory for Part 6 - JPQL, native SQL, modifying queries, and bulk update persistence-context behavior.
+
+servers:
+  - url: http://localhost:8086
+    description: Local P05 server
+
+tags:
+  - name: Setup
+    description: Creates Department and Employee experiment data.
+  - name: JPQL Select
+    description: Entity/field JPQL, positional/named parameters, and JOIN.
+  - name: Aggregate and Projection
+    description: COUNT, SUM, AVG, and JPQL constructor projections.
+  - name: Native SQL
+    description: Physical table/column SQL with nativeQuery=true.
+  - name: Modifying Query
+    description: JPQL UPDATE and DELETE with @Modifying.
+  - name: Bulk Context
+    description: Stale Persistence Context and clearAutomatically experiments.
+
+paths:
+  /practice/departments:
+    post:
+      tags: [Setup]
+      summary: Create a department
+      operationId: createDepartment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDepartmentRequest'
+            example:
+              name: Bruno Engineering
+      responses:
+        '201':
+          description: Department created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /practice/employees:
+    post:
+      tags: [Setup]
+      summary: Create an employee for query experiments
+      description: Use a unique email and an existing departmentId.
+      operationId: createEmployee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEmployeeRequest'
+            example:
+              name: Bruno Employee
+              email: bruno.employee.p05@example.com
+              salary: 1800.00
+              active: true
+              departmentId: 1
+      responses:
+        '201':
+          description: Employee created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /practice/jpql/all:
+    get:
+      tags: [JPQL Select]
+      summary: Select all employees with JPQL
+      description: Uses SELECT e FROM Employee e, where Employee is an entity name.
+      operationId: findAllJpql
+      responses:
+        '200':
+          $ref: '#/components/responses/EmployeeListResponse'
+
+  /practice/jpql/active:
+    get:
+      tags: [JPQL Select]
+      summary: Select active employees with JPQL
+      description: Uses Employee entity and active Java field rather than employees table SQL.
+      operationId: findActiveJpql
+      responses:
+        '200':
+          $ref: '#/components/responses/EmployeeListResponse'
+
+  /practice/jpql/positional:
+    get:
+      tags: [JPQL Select]
+      summary: Query using positional parameters
+      description: Demonstrates ?1=name and ?2=active.
+      operationId: findPositional
+      parameters:
+        - $ref: '#/components/parameters/EmployeeName'
+        - $ref: '#/components/parameters/Active'
+      responses:
+        '200':
+          $ref: '#/components/responses/EmployeeListResponse'
+
+  /practice/jpql/named:
+    get:
+      tags: [JPQL Select]
+      summary: Query using named parameters and @Param
+      description: Demonstrates :name and :active bound with @Param.
+      operationId: findNamed
+      parameters:
+        - $ref: '#/components/parameters/EmployeeName'
+        - $ref: '#/components/parameters/Active'
+      responses:
+        '200':
+          $ref: '#/components/responses/EmployeeListResponse'
+
+  /practice/jpql/join:
+    get:
+      tags: [JPQL Select]
+      summary: Join Employee to Department with JPQL
+      description: JOIN e.department follows the Java relationship.
+      operationId: findByDepartment
+      parameters:
+        - name: departmentName
+          in: query
+          required: true
+          schema:
+            type: string
+            example: Engineering
+      responses:
+        '200':
+          $ref: '#/components/responses/EmployeeListResponse'
+
+  /practice/jpql/aggregate:
+    get:
+      tags: [Aggregate and Projection]
+      summary: Run COUNT, SUM, and AVG JPQL queries
+      operationId: aggregate
+      responses:
+        '200':
+          description: Aggregate values across all employees
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AggregateResult'
+
+  /practice/jpql/projection:
+    get:
+      tags: [Aggregate and Projection]
+      summary: Project employees into EmployeeSummary DTOs
+      description: Uses a JPQL constructor expression with the actual DTO package.
+      operationId: employeeProjection
+      responses:
+        '200':
+          description: Employee summary DTO list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EmployeeSummary'
+
+  /practice/jpql/department-stats:
+    get:
+      tags: [Aggregate and Projection]
+      summary: Count employees per department
+      description: Uses LEFT JOIN, GROUP BY, COUNT, and DepartmentStats constructor projection.
+      operationId: departmentStats
+      responses:
+        '200':
+          description: Department aggregate DTO list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DepartmentStats'
+
+  /practice/native/active:
+    get:
+      tags: [Native SQL]
+      summary: Select active employees with native PostgreSQL SQL
+      description: Uses SELECT * FROM employees WHERE active=true and nativeQuery=true.
+      operationId: findActiveNative
+      responses:
+        '200':
+          $ref: '#/components/responses/EmployeeListResponse'
+
+  /practice/modify/{id}/deactivate:
+    patch:
+      tags: [Modifying Query]
+      summary: Deactivate an employee with JPQL UPDATE
+      description: Uses @Modifying and returns the affected-row count.
+      operationId: deactivateEmployee
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+      responses:
+        '200':
+          $ref: '#/components/responses/AffectedRowsResponse'
+
+  /practice/modify/{id}/salary:
+    patch:
+      tags: [Modifying Query]
+      summary: Update employee salary with JPQL UPDATE
+      description: Uses @Modifying with named id and salary parameters.
+      operationId: updateSalary
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSalaryRequest'
+            example:
+              salary: 2500.00
+      responses:
+        '200':
+          $ref: '#/components/responses/AffectedRowsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /practice/modify/inactive:
+    delete:
+      tags: [Modifying Query]
+      summary: Delete all inactive employees with JPQL DELETE
+      description: Learning endpoint that deletes every employee whose active field is false.
+      operationId: deleteInactiveEmployees
+      responses:
+        '200':
+          $ref: '#/components/responses/AffectedRowsResponse'
+
+  /practice/bulk/stale-context/{id}:
+    post:
+      tags: [Bulk Context]
+      summary: Experiment A - observe a stale managed entity after bulk UPDATE
+      description: Shows the old managed value, new database value, and value after clear/reload in one response.
+      operationId: demonstrateStaleContext
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNameRequest'
+            example:
+              name: Bruno Bulk Experiment A
+      responses:
+        '200':
+          description: Stale Persistence Context experiment result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkUpdateResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /practice/bulk/auto-clear/{id}:
+    post:
+      tags: [Bulk Context]
+      summary: Experiment B - bulk UPDATE with clearAutomatically
+      description: Shows that the previously managed object becomes detached before the entity is reloaded.
+      operationId: demonstrateAutomaticClear
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNameRequest'
+            example:
+              name: Bruno Bulk Experiment B
+      responses:
+        '200':
+          description: Automatic-clear experiment result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutoClearBulkUpdateResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    EmployeeId:
+      name: id
+      in: path
+      required: true
+      description: Existing employee ID
+      schema:
+        type: integer
+        format: int64
+        example: 1
+    EmployeeName:
+      name: name
+      in: query
+      required: true
+      schema:
+        type: string
+        example: Alice
+    Active:
+      name: active
+      in: query
+      required: true
+      schema:
+        type: boolean
+        example: true
+
+  responses:
+    EmployeeListResponse:
+      description: Employee DTO list
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/EmployeeResponse'
+    AffectedRowsResponse:
+      description: Modifying query result
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AffectedRowsResult'
+    BadRequest:
+      description: Request validation failed
+    NotFound:
+      description: Referenced entity was not found
+
+  schemas:
+    CreateDepartmentRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+
+    DepartmentResponse:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+
+    CreateEmployeeRequest:
+      type: object
+      required: [name, email, salary, active, departmentId]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          maxLength: 150
+        salary:
+          type: number
+          minimum: 0
+          example: 1800.00
+        active:
+          type: boolean
+          example: true
+        departmentId:
+          type: integer
+          format: int64
+          example: 1
+
+    EmployeeResponse:
+      type: object
+      required: [id, name, email, salary, active, departmentId, departmentName]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        salary:
+          type: number
+        active:
+          type: boolean
+        departmentId:
+          type: integer
+          format: int64
+        departmentName:
+          type: string
+
+    AggregateResult:
+      type: object
+      required: [employeeCount, totalSalary, averageSalary]
+      properties:
+        employeeCount:
+          type: integer
+          format: int64
+        totalSalary:
+          type: number
+        averageSalary:
+          type: number
+          format: double
+
+    EmployeeSummary:
+      type: object
+      required: [id, name, email]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+
+    DepartmentStats:
+      type: object
+      required: [departmentName, employeeCount]
+      properties:
+        departmentName:
+          type: string
+        employeeCount:
+          type: integer
+          format: int64
+
+    UpdateSalaryRequest:
+      type: object
+      required: [salary]
+      properties:
+        salary:
+          type: number
+          minimum: 0
+
+    UpdateNameRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+
+    AffectedRowsResult:
+      type: object
+      required: [operation, affectedRows]
+      properties:
+        operation:
+          type: string
+        affectedRows:
+          type: integer
+          format: int32
+
+    BulkUpdateResult:
+      type: object
+      required:
+        - affectedRows
+        - managedValueBeforeBulkUpdate
+        - databaseValueAfterBulkUpdate
+        - managedValueAfterBulkUpdate
+        - managedBeforeClear
+        - managedAfterClear
+        - valueAfterClearAndReload
+      properties:
+        affectedRows:
+          type: integer
+          format: int32
+        managedValueBeforeBulkUpdate:
+          type: string
+        databaseValueAfterBulkUpdate:
+          type: string
+        managedValueAfterBulkUpdate:
+          type: string
+        managedBeforeClear:
+          type: boolean
+        managedAfterClear:
+          type: boolean
+        valueAfterClearAndReload:
+          type: string
+
+    AutoClearBulkUpdateResult:
+      type: object
+      required:
+        - affectedRows
+        - valueBeforeBulkUpdate
+        - oldObjectValueAfterBulkUpdate
+        - managedBeforeQuery
+        - managedAfterQuery
+        - valueAfterReload
+      properties:
+        affectedRows:
+          type: integer
+          format: int32
+        valueBeforeBulkUpdate:
+          type: string
+        oldObjectValueAfterBulkUpdate:
+          type: string
+        managedBeforeQuery:
+          type: boolean
+        managedAfterQuery:
+          type: boolean
+        valueAfterReload:
+          type: string

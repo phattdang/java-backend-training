@@ -1,0 +1,565 @@
+openapi: 3.0.3
+info:
+  title: P07 - Cascade & Orphan Removal Practice API
+  version: 1.0.0
+  description: |
+    Runnable laboratory for Part 9 - JPA Cascade and orphanRemoval.
+    Recommended order: run PERSIST, MERGE, REMOVE setup then delete, ALL,
+    orphan setup then remove one child, no-cascade setup then delete, concept
+    comparison, and the isolated database cascade demo.
+
+servers:
+  - url: http://localhost:8088
+    description: Local P07 server
+
+tags:
+  - name: 01 Cascade PERSIST
+    description: Persists only the parent and lets CascadeType.PERSIST save children.
+  - name: 02 Cascade MERGE
+    description: Merges a detached parent graph and shows managed vs detached state.
+  - name: 03 Cascade REMOVE
+    description: Deletes a parent and lets CascadeType.REMOVE delete all children.
+  - name: 04 Cascade ALL
+    description: Demonstrates convenient ALL for lifecycle-owned OrderItems.
+  - name: 05 orphanRemoval
+    description: Removes one child from the parent collection and deletes only that orphan.
+  - name: 06 Delete Parent Cases
+    description: Demonstrates what happens when parent deletion has no remove cascade.
+  - name: 07 Concept Comparison
+    description: Explains Cascade REMOVE vs orphanRemoval.
+  - name: 08 Database Cascade
+    description: Uses direct SQL against isolated FK ON DELETE CASCADE tables.
+
+paths:
+  /api/part9/persist/orders:
+    post:
+      tags:
+        - 01 Cascade PERSIST
+      summary: Persist parent only
+      description: Part 9.1, 9.2, and 9.6. Only the Order parent is explicitly persisted; CascadeType.PERSIST propagates to OrderItem children.
+      operationId: persistParentOnly
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+            example:
+              orderCode: PERSIST-BRU-001
+              customerName: Bruno Persist Customer
+              items:
+                - productName: Keyboard
+                  quantity: 1
+                  price: 49.99
+                - productName: Mouse
+                  quantity: 2
+                  price: 19.99
+      responses:
+        '200':
+          description: Parent and children persisted through CascadeType.PERSIST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CascadePersistResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/part9/merge/orders:
+    post:
+      tags:
+        - 02 Cascade MERGE
+      summary: Merge detached parent and child graph
+      description: Part 9.3. Detached parent and child are changed, then merge(parent) returns a managed copy and cascades MERGE to children.
+      operationId: mergeDetachedGraph
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+            example:
+              orderCode: MERGE-BRU-001
+              customerName: Bruno Merge Customer
+              items:
+                - productName: Monitor
+                  quantity: 1
+                  price: 199.99
+                - productName: USB Hub
+                  quantity: 1
+                  price: 29.99
+      responses:
+        '200':
+          description: Merge lifecycle result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CascadeMergeResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/part9/remove/orders:
+    post:
+      tags:
+        - 03 Cascade REMOVE
+      summary: Create REMOVE demo data
+      description: Part 9.4 setup. Children are explicitly persisted because CascadeType.REMOVE does not include PERSIST.
+      operationId: createRemoveDemo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+            example:
+              orderCode: REMOVE-BRU-001
+              customerName: Bruno Remove Customer
+              items:
+                - productName: Item A
+                  quantity: 1
+                  price: 10.00
+                - productName: Item B
+                  quantity: 2
+                  price: 20.00
+                - productName: Item C
+                  quantity: 3
+                  price: 30.00
+      responses:
+        '200':
+          description: REMOVE demo parent created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CascadePersistResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/part9/remove/orders/{parentId}:
+    delete:
+      tags:
+        - 03 Cascade REMOVE
+      summary: Delete parent with CascadeType.REMOVE
+      description: Part 9.4 and 9.10 Case B. Deleting the parent removes every associated child.
+      operationId: removeParent
+      parameters:
+        - $ref: '#/components/parameters/ParentId'
+      responses:
+        '200':
+          description: Parent and children deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CascadeRemoveResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/part9/all/orders:
+    post:
+      tags:
+        - 04 Cascade ALL
+      summary: Persist lifecycle-owned graph with CascadeType.ALL
+      description: Part 9.5 and 9.7. Shows ALL is convenient for true lifecycle-owned children, but should not be chosen by cardinality alone.
+      operationId: persistAllGraph
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+            example:
+              orderCode: ALL-BRU-001
+              customerName: Bruno All Customer
+              items:
+                - productName: Laptop Stand
+                  quantity: 1
+                  price: 35.00
+                - productName: Desk Lamp
+                  quantity: 1
+                  price: 45.00
+      responses:
+        '200':
+          description: Parent graph persisted using CascadeType.ALL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CascadePersistResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/part9/orphan/orders:
+    post:
+      tags:
+        - 05 orphanRemoval
+      summary: Create orphanRemoval demo data
+      description: Part 9.8 setup. Children are explicitly persisted so orphanRemoval behavior is not hidden by CascadeType.ALL.
+      operationId: createOrphanDemo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+            example:
+              orderCode: ORPHAN-BRU-001
+              customerName: Bruno Orphan Customer
+              items:
+                - productName: Child A
+                  quantity: 1
+                  price: 11.00
+                - productName: Child B
+                  quantity: 1
+                  price: 22.00
+                - productName: Child C
+                  quantity: 1
+                  price: 33.00
+      responses:
+        '200':
+          description: orphanRemoval demo parent created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CascadePersistResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/part9/orphan/orders/{parentId}/items/{childId}:
+    delete:
+      tags:
+        - 05 orphanRemoval
+      summary: Remove one child from parent relationship
+      description: Part 9.8 and 9.9. Removing one OrderItem from Order.items deletes that orphan while parent and sibling children remain.
+      operationId: removeOrphan
+      parameters:
+        - $ref: '#/components/parameters/ParentId'
+        - $ref: '#/components/parameters/ChildId'
+      responses:
+        '200':
+          description: One orphan child deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrphanRemovalResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/part9/no-cascade/orders:
+    post:
+      tags:
+        - 06 Delete Parent Cases
+      summary: Create no-cascade demo data
+      description: Part 9.10 Case A setup. Creates a relationship with no remove cascade so FK-protected parent delete is isolated.
+      operationId: createNoCascadeDemo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+            example:
+              orderCode: NO-CASCADE-BRU-001
+              customerName: Bruno No Cascade Customer
+              items:
+                - productName: Protected Child A
+                  quantity: 1
+                  price: 12.00
+                - productName: Protected Child B
+                  quantity: 1
+                  price: 24.00
+      responses:
+        '200':
+          description: No-cascade demo parent created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CascadePersistResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/part9/no-cascade/orders/{parentId}:
+    delete:
+      tags:
+        - 06 Delete Parent Cases
+      summary: Try deleting parent without CascadeType.REMOVE
+      description: Part 9.10 Case A. Child rows still reference the parent, so the FK constraint is expected to block deletion.
+      operationId: attemptNoCascadeDelete
+      parameters:
+        - $ref: '#/components/parameters/ParentId'
+      responses:
+        '200':
+          description: Expected FK-blocked delete result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoCascadeRemoveResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/part9/remove-vs-orphan:
+    get:
+      tags:
+        - 07 Concept Comparison
+      summary: Compare Cascade REMOVE and orphanRemoval
+      description: |
+        Part 9.9. Memory rule: Cascade REMOVE means Parent dies -> Child dies;
+        orphanRemoval means Child is abandoned -> Child dies.
+      operationId: compareRemoveAndOrphan
+      responses:
+        '200':
+          description: Concept comparison
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConceptComparisonResult'
+
+  /api/part9/database-cascade/orders:
+    post:
+      tags:
+        - 08 Database Cascade
+      summary: Direct SQL delete with database FK cascade
+      description: Part 9.11. Uses JdbcTemplate direct SQL against db_orders/db_order_items to prove ON DELETE CASCADE works without JPA cascade.
+      operationId: databaseCascade
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+            example:
+              orderCode: DB-CASCADE-BRU-001
+              customerName: Bruno Database Cascade Customer
+              items:
+                - productName: DB Child A
+                  quantity: 1
+                  price: 15.00
+                - productName: DB Child B
+                  quantity: 2
+                  price: 25.00
+                - productName: DB Child C
+                  quantity: 3
+                  price: 35.00
+      responses:
+        '200':
+          description: Direct SQL parent delete cascaded inside PostgreSQL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatabaseCascadeResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+components:
+  parameters:
+    ParentId:
+      name: parentId
+      in: path
+      required: true
+      description: Existing demo parent id returned by the matching setup endpoint
+      schema:
+        type: integer
+        format: int64
+        example: 1
+    ChildId:
+      name: childId
+      in: path
+      required: true
+      description: Existing child id returned by POST /api/part9/orphan/orders
+      schema:
+        type: integer
+        format: int64
+        example: 2
+
+  responses:
+    BadRequest:
+      description: Request validation failed
+    NotFound:
+      description: Requested demo row was not found
+
+  schemas:
+    CreateOrderRequest:
+      type: object
+      required: [orderCode, customerName, items]
+      properties:
+        orderCode:
+          type: string
+          example: PERSIST-BRU-001
+        customerName:
+          type: string
+          example: Bruno Customer
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ItemRequest'
+
+    ItemRequest:
+      type: object
+      required: [productName, quantity, price]
+      properties:
+        productName:
+          type: string
+          example: Keyboard
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+          example: 1
+        price:
+          type: number
+          minimum: 0.01
+          example: 49.99
+
+    CascadePersistResult:
+      type: object
+      required: [parentId, childIds, proof]
+      properties:
+        parentId:
+          type: integer
+          format: int64
+        childIds:
+          type: array
+          items:
+            type: integer
+            format: int64
+        proof:
+          type: string
+          example: Only parent was explicitly persisted; children received generated IDs through cascade.
+
+    CascadeMergeResult:
+      type: object
+      required:
+        - parentId
+        - detachedParentManagedBeforeMerge
+        - detachedChildManagedBeforeMerge
+        - returnedParentManaged
+        - returnedChildManaged
+        - mergeReturnedSameInstance
+        - mergedCustomerName
+        - mergedProductName
+      properties:
+        parentId:
+          type: integer
+          format: int64
+        detachedParentManagedBeforeMerge:
+          type: boolean
+          example: false
+        detachedChildManagedBeforeMerge:
+          type: boolean
+          example: false
+        returnedParentManaged:
+          type: boolean
+          example: true
+        returnedChildManaged:
+          type: boolean
+          example: true
+        mergeReturnedSameInstance:
+          type: boolean
+          example: false
+        mergedCustomerName:
+          type: string
+          example: Bruno Merge Customer - merged
+        mergedProductName:
+          type: string
+          example: Monitor - merged
+
+    CascadeRemoveResult:
+      type: object
+      required: [parentId, childrenBeforeDelete, parentExistsAfter, childrenRemainingAfter]
+      properties:
+        parentId:
+          type: integer
+          format: int64
+        childrenBeforeDelete:
+          type: integer
+          format: int32
+          example: 3
+        parentExistsAfter:
+          type: boolean
+          example: false
+        childrenRemainingAfter:
+          type: integer
+          format: int64
+          example: 0
+
+    OrphanRemovalResult:
+      type: object
+      required: [parentId, removedChildId, parentExistsAfter, removedChildExistsAfter, remainingChildren]
+      properties:
+        parentId:
+          type: integer
+          format: int64
+        removedChildId:
+          type: integer
+          format: int64
+        parentExistsAfter:
+          type: boolean
+          example: true
+        removedChildExistsAfter:
+          type: boolean
+          example: false
+        remainingChildren:
+          type: integer
+          format: int32
+          example: 2
+
+    NoCascadeRemoveResult:
+      type: object
+      required: [parentId, childrenBeforeDelete, deletionBlockedByForeignKey, parentStillExists, explanation]
+      properties:
+        parentId:
+          type: integer
+          format: int64
+        childrenBeforeDelete:
+          type: integer
+          format: int32
+          example: 2
+        deletionBlockedByForeignKey:
+          type: boolean
+          example: true
+        parentStillExists:
+          type: boolean
+          example: true
+        explanation:
+          type: string
+          example: Parent delete was blocked because child rows still reference it and no CascadeType.REMOVE was configured.
+
+    ConceptComparisonResult:
+      type: object
+      required: [cascadeRemoveTrigger, cascadeRemoveResult, orphanRemovalTrigger, orphanRemovalResult, memoryRule]
+      properties:
+        cascadeRemoveTrigger:
+          type: string
+          example: Parent is removed
+        cascadeRemoveResult:
+          type: string
+          example: REMOVE propagates to all children
+        orphanRemovalTrigger:
+          type: string
+          example: One child is removed from the parent relationship
+        orphanRemovalResult:
+          type: string
+          example: Only that orphan child is deleted
+        memoryRule:
+          type: string
+          example: 'Cascade REMOVE: Parent dies -> Child dies. orphanRemoval: Child is abandoned -> Child dies.'
+
+    DatabaseCascadeResult:
+      type: object
+      required: [parentId, childrenBeforeDirectSqlDelete, parentRowsDeleted, childrenAfterDirectSqlDelete, mechanism]
+      properties:
+        parentId:
+          type: integer
+          format: int64
+        childrenBeforeDirectSqlDelete:
+          type: integer
+          format: int32
+          example: 3
+        parentRowsDeleted:
+          type: integer
+          format: int32
+          example: 1
+        childrenAfterDirectSqlDelete:
+          type: integer
+          format: int32
+          example: 0
+        mechanism:
+          type: string
+          example: JdbcTemplate direct SQL delete; PostgreSQL FK ON DELETE CASCADE removed children.

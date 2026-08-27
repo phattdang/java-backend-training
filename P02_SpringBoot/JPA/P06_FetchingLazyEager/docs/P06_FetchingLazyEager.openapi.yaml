@@ -1,0 +1,528 @@
+openapi: 3.0.3
+info:
+  title: P06 - Fetching LAZY & EAGER Practice API
+  version: 1.0.0
+  description: |
+    Runnable laboratory for Part 8 fetching concepts.
+    Recommended order: create Department, create two Employees, run LAZY/proxy/exception
+    experiments, compare basic/detail fetching, then create and load the isolated EAGER model.
+
+servers:
+  - url: http://localhost:8087
+    description: Local P06 server
+
+tags:
+  - name: 01 Setup
+    description: Creates Department and Employee data for the main LAZY model.
+  - name: 02 Lazy Loading
+    description: Observes ManyToOne and OneToMany initialization and SQL timing.
+  - name: 03 Proxy and Exception
+    description: Inspects a lazy proxy and deliberately demonstrates LazyInitializationException.
+  - name: 04 Fetch Join and EntityGraph
+    description: Intentionally fetches Department for employee-detail use cases.
+  - name: 05 Use Cases
+    description: Compares basic and detailed data requirements.
+  - name: 06 Eager Demo
+    description: Uses a separate isolated EAGER entity model.
+
+paths:
+  /practice/departments:
+    post:
+      tags: [01 Setup]
+      summary: Create Department seed data
+      description: Part 8.1 and 8.2 setup. Save the returned id for Employee creation.
+      operationId: createDepartment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDepartmentRequest'
+            example:
+              name: Bruno Engineering
+              description: Department used by the P06 fetching experiments
+      responses:
+        '201':
+          description: Department created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /practice/employees:
+    post:
+      tags: [01 Setup]
+      summary: Create an Employee with a LAZY Department
+      description: Part 8.2 and 8.4 setup. Use an existing departmentId and a unique email.
+      operationId: createEmployee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEmployeeRequest'
+            example:
+              name: Bruno Employee
+              email: bruno.employee.p06@example.com
+              salary: 2500.00
+              departmentId: 1
+      responses:
+        '201':
+          description: Employee created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeBasicResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /practice/lazy/employees/{id}/department:
+    get:
+      tags: [02 Lazy Loading]
+      summary: Observe LAZY ManyToOne SQL timing
+      description: Part 8.2 and 8.7. Employee is selected first; Department is selected when department.name is accessed.
+      operationId: demonstrateLazyDepartment
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+      responses:
+        '200':
+          description: Initialization changes from false to true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LazyLoadingResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /practice/lazy/departments/{id}/employees:
+    get:
+      tags: [02 Lazy Loading]
+      summary: Observe LAZY OneToMany SQL timing
+      description: Part 8.5 and 8.7. The Employee collection query occurs at employees.size().
+      operationId: demonstrateLazyEmployees
+      parameters:
+        - $ref: '#/components/parameters/DepartmentId'
+      responses:
+        '200':
+          description: Collection initialization changes from false to true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionLazyLoadingResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /practice/proxy/employees/{id}:
+    get:
+      tags: [03 Proxy and Exception]
+      summary: Inspect the Department lazy proxy
+      description: Part 8.6. Observe runtimeClass and initializedBeforeAccess/initializedAfterAccess.
+      operationId: inspectProxy
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+      responses:
+        '200':
+          description: Proxy inspection result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProxyInspectionResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /practice/lazy-exception/employees/{id}:
+    get:
+      tags: [03 Proxy and Exception]
+      summary: Demonstrate LazyInitializationException safely
+      description: Part 8.8. Accesses Department after the loading transaction ends while OSIV is disabled; the expected exception is returned as a DTO.
+      operationId: demonstrateLazyInitializationException
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+      responses:
+        '200':
+          description: Expected exception information without stopping the application
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LazyExceptionResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /practice/fetch-join/employees/{id}:
+    get:
+      tags: [04 Fetch Join and EntityGraph]
+      summary: Fetch Employee detail using JOIN FETCH
+      description: Part 8.10 and 8.11. Department is initialized by the JPQL repository query.
+      operationId: fetchJoin
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+      responses:
+        '200':
+          $ref: '#/components/responses/EmployeeDetailResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /practice/entity-graph/employees/{id}:
+    get:
+      tags: [04 Fetch Join and EntityGraph]
+      summary: Fetch Employee detail using @EntityGraph
+      description: Part 8.12. Returns the same logical DTO as the JOIN FETCH endpoint.
+      operationId: entityGraph
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+      responses:
+        '200':
+          $ref: '#/components/responses/EmployeeDetailResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /practice/use-cases/employees/{id}/basic:
+    get:
+      tags: [05 Use Cases]
+      summary: Use case A - basic Employee information
+      description: Part 8.9 and 8.13. Maps only id, name, and email; Department is intentionally not fetched.
+      operationId: basicUseCase
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+      responses:
+        '200':
+          description: Basic Employee response without Department data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeBasicResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /practice/use-cases/employees/{id}/detail:
+    get:
+      tags: [05 Use Cases]
+      summary: Use case B - Employee detail using JOIN FETCH
+      description: Part 8.10, 8.11, and 8.13. Department is required and fetched intentionally.
+      operationId: detailUseCase
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+      responses:
+        '200':
+          $ref: '#/components/responses/EmployeeDetailResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /practice/use-cases/employees/{id}/detail-entity-graph:
+    get:
+      tags: [05 Use Cases]
+      summary: Use case C - Employee detail using @EntityGraph
+      description: Part 8.12 and 8.13. Same response need, different fetching instruction.
+      operationId: detailEntityGraphUseCase
+      parameters:
+        - $ref: '#/components/parameters/EmployeeId'
+      responses:
+        '200':
+          $ref: '#/components/responses/EmployeeDetailResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /practice/find-all/initialization:
+    get:
+      tags: [05 Use Cases]
+      summary: Verify findAll does not initialize every relationship
+      description: Part 8.1 and 8.9. Each Department relation should remain uninitialized because no Department field is read.
+      operationId: inspectFindAll
+      responses:
+        '200':
+          description: Employee list with relationship initialization state
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RelationshipInitializationResult'
+
+  /practice/eager-demo:
+    post:
+      tags: [06 Eager Demo]
+      summary: Create and reload isolated EAGER demo data
+      description: Part 8.3 and 8.4. Uses eager_departments/eager_employees and reloads after clearing the Persistence Context.
+      operationId: createEagerDemo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEagerDemoRequest'
+            example:
+              departmentName: Bruno Eager Sales
+              employeeName: Bruno Eager Employee
+              employeeEmail: bruno.eager.p06@example.com
+              salary: 2300.00
+      responses:
+        '201':
+          description: EAGER demo data created and reloaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EagerLoadingResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /practice/eager-demo/employees/{id}:
+    get:
+      tags: [06 Eager Demo]
+      summary: Load an isolated EAGER Employee
+      description: Part 8.3 and 8.9. Department must be initialized, but the SQL shape remains provider-dependent.
+      operationId: loadEagerEmployee
+      parameters:
+        - $ref: '#/components/parameters/EagerEmployeeId'
+      responses:
+        '200':
+          description: EAGER loading result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EagerLoadingResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    EmployeeId:
+      name: id
+      in: path
+      required: true
+      description: Existing main-model Employee id
+      schema:
+        type: integer
+        format: int64
+        example: 1
+    DepartmentId:
+      name: id
+      in: path
+      required: true
+      description: Existing main-model Department id
+      schema:
+        type: integer
+        format: int64
+        example: 1
+    EagerEmployeeId:
+      name: id
+      in: path
+      required: true
+      description: Existing EagerEmployee id returned by POST /practice/eager-demo
+      schema:
+        type: integer
+        format: int64
+        example: 1
+
+  responses:
+    EmployeeDetailResult:
+      description: Employee and intentionally fetched Department detail
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/EmployeeDetailResponse'
+    BadRequest:
+      description: Request validation failed
+    NotFound:
+      description: Requested Employee or Department was not found
+
+  schemas:
+    CreateDepartmentRequest:
+      type: object
+      required: [name, description]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+
+    DepartmentResponse:
+      type: object
+      required: [id, name, description]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        description:
+          type: string
+
+    CreateEmployeeRequest:
+      type: object
+      required: [name, email, salary, departmentId]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          maxLength: 150
+        salary:
+          type: number
+          minimum: 0
+        departmentId:
+          type: integer
+          format: int64
+
+    EmployeeBasicResponse:
+      type: object
+      required: [id, name, email]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+
+    EmployeeDetailResponse:
+      type: object
+      required: [id, name, email, salary, departmentId, departmentName, departmentDescription]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        salary:
+          type: number
+        departmentId:
+          type: integer
+          format: int64
+        departmentName:
+          type: string
+        departmentDescription:
+          type: string
+
+    LazyLoadingResult:
+      type: object
+      required: [employeeId, employeeName, initializedBeforeAccess, initializedAfterAccess, departmentName]
+      properties:
+        employeeId:
+          type: integer
+          format: int64
+        employeeName:
+          type: string
+        initializedBeforeAccess:
+          type: boolean
+          example: false
+        initializedAfterAccess:
+          type: boolean
+          example: true
+        departmentName:
+          type: string
+
+    CollectionLazyLoadingResult:
+      type: object
+      required: [departmentId, departmentName, initializedBeforeAccess, initializedAfterAccess, employeeCount, employeeNames]
+      properties:
+        departmentId:
+          type: integer
+          format: int64
+        departmentName:
+          type: string
+        initializedBeforeAccess:
+          type: boolean
+          example: false
+        initializedAfterAccess:
+          type: boolean
+          example: true
+        employeeCount:
+          type: integer
+          format: int32
+        employeeNames:
+          type: array
+          items:
+            type: string
+
+    ProxyInspectionResult:
+      type: object
+      required: [runtimeClass, initializedBeforeAccess, initializedAfterAccess, departmentName]
+      properties:
+        runtimeClass:
+          type: string
+          example: com.example.P06_FetchingLazyEager.entity.Department$HibernateProxy
+        initializedBeforeAccess:
+          type: boolean
+          example: false
+        initializedAfterAccess:
+          type: boolean
+          example: true
+        departmentName:
+          type: string
+
+    LazyExceptionResult:
+      type: object
+      required: [exceptionOccurred, exceptionType, message, explanation]
+      properties:
+        exceptionOccurred:
+          type: boolean
+          example: true
+        exceptionType:
+          type: string
+          example: LazyInitializationException
+        message:
+          type: string
+        explanation:
+          type: string
+
+    RelationshipInitializationResult:
+      type: object
+      required: [employeeId, employeeName, departmentInitialized]
+      properties:
+        employeeId:
+          type: integer
+          format: int64
+        employeeName:
+          type: string
+        departmentInitialized:
+          type: boolean
+          example: false
+
+    CreateEagerDemoRequest:
+      type: object
+      required: [departmentName, employeeName, employeeEmail, salary]
+      properties:
+        departmentName:
+          type: string
+          maxLength: 100
+        employeeName:
+          type: string
+          maxLength: 100
+        employeeEmail:
+          type: string
+          format: email
+          maxLength: 150
+        salary:
+          type: number
+          minimum: 0
+
+    EagerLoadingResult:
+      type: object
+      required: [employeeId, employeeName, departmentId, departmentName, departmentInitialized]
+      properties:
+        employeeId:
+          type: integer
+          format: int64
+        employeeName:
+          type: string
+        departmentId:
+          type: integer
+          format: int64
+        departmentName:
+          type: string
+        departmentInitialized:
+          type: boolean
+          example: true
