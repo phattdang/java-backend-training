@@ -1,0 +1,556 @@
+openapi: 3.0.3
+info:
+  title: P08 - N+1 Query Practice API
+  version: 1.0.0
+  description: |
+    Runnable laboratory for Part 11 - N+1 query problem.
+    Recommended order: seed sample data, run OneToMany baseline, run OneToMany
+    fetch join and EntityGraph comparisons, run ManyToOne baseline, run ManyToOne
+    fetch join and EntityGraph comparisons, then run DTO projection, batch fetching
+    concept, and EAGER misconception endpoints.
+
+servers:
+  - url: http://localhost:8089
+    description: Local P08 server
+
+tags:
+  - name: 01 Setup
+    description: Creates Department and Employee data for the N+1 experiments.
+  - name: 02 Baseline N+1
+    description: Intentionally reproduces broken N+1 query behavior.
+  - name: 03 Fetch Join Solutions
+    description: Solves the same data needs using JPQL JOIN FETCH.
+  - name: 04 EntityGraph Solutions
+    description: Solves the same data needs using repository-level EntityGraph fetch plans.
+  - name: 05 DTO Projection
+    description: Reads selected fields directly without loading a full managed entity graph.
+  - name: 06 Compare
+    description: Same logical data need with different query strategies for SQL log comparison.
+  - name: 07 Concepts
+    description: Batch fetching concept and why globally using EAGER is not the solution.
+
+paths:
+  /practice/departments:
+    post:
+      tags: [01 Setup]
+      summary: Create Department
+      description: Part 11.5 setup. Creates one Department for manual test data.
+      operationId: createDepartment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDepartmentRequest'
+            example:
+              name: Bruno Engineering
+      responses:
+        '200':
+          description: Department created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /practice/employees:
+    post:
+      tags: [01 Setup]
+      summary: Create Employee
+      description: Part 11.5 setup. Creates one Employee linked to an existing Department.
+      operationId: createEmployee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEmployeeRequest'
+            example:
+              name: Bruno Employee
+              email: bruno.employee.p08@example.com
+              salary: 2500.00
+              departmentId: 1
+      responses:
+        '200':
+          description: Employee created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /practice/seed:
+    post:
+      tags: [01 Setup]
+      summary: Seed 3 Departments x 3 Employees
+      description: Part 11.5 setup. Creates Department A/B/C with three Employees each so N+1 SQL is easy to observe.
+      operationId: seedDepartmentsAndEmployees
+      responses:
+        '200':
+          description: Seed data created
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DepartmentResponse'
+
+  /practice/nplus1/one-to-many:
+    get:
+      tags: [02 Baseline N+1]
+      summary: Reproduce OneToMany N+1
+      description: Part 11.1, 11.2, 11.3, and 11.5. Loads Departments first, then accesses each LAZY employees collection.
+      operationId: oneToManyNPlusOne
+      responses:
+        '200':
+          description: One root Department query plus repeated Employee relationship queries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentExperimentResponse'
+
+  /practice/nplus1/many-to-one:
+    get:
+      tags: [02 Baseline N+1]
+      summary: Reproduce ManyToOne N+1
+      description: Part 11.4 and 11.5. Loads Employees first, then accesses each LAZY Department. Extra query count may be lower than Employee count because of first-level cache reuse.
+      operationId: manyToOneNPlusOne
+      responses:
+        '200':
+          description: One root Employee query plus repeated Department relationship queries where applicable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeExperimentResponse'
+
+  /practice/solutions/fetch-join/departments:
+    get:
+      tags: [03 Fetch Join Solutions]
+      summary: Solve OneToMany N+1 using fetch join
+      description: Part 11.6. Uses SELECT DISTINCT d FROM Department d LEFT JOIN FETCH d.employees.
+      operationId: departmentsFetchJoin
+      responses:
+        '200':
+          description: Departments and Employees fetched for this use case
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentExperimentResponse'
+
+  /practice/solutions/fetch-join/employees:
+    get:
+      tags: [03 Fetch Join Solutions]
+      summary: Solve ManyToOne N+1 using fetch join
+      description: Part 11.6. Uses SELECT e FROM Employee e JOIN FETCH e.department.
+      operationId: employeesFetchJoin
+      responses:
+        '200':
+          description: Employees and Departments fetched for this use case
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeExperimentResponse'
+
+  /practice/solutions/entity-graph/departments:
+    get:
+      tags: [04 EntityGraph Solutions]
+      summary: Solve OneToMany N+1 using EntityGraph
+      description: Part 11.7. Uses @EntityGraph(attributePaths = "employees") on the repository method.
+      operationId: departmentsEntityGraph
+      responses:
+        '200':
+          description: Departments with Employees fetched by repository fetch plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentExperimentResponse'
+
+  /practice/solutions/entity-graph/employees:
+    get:
+      tags: [04 EntityGraph Solutions]
+      summary: Solve ManyToOne N+1 using EntityGraph
+      description: Part 11.7. Uses @EntityGraph(attributePaths = "department") on the repository method.
+      operationId: employeesEntityGraph
+      responses:
+        '200':
+          description: Employees with Departments fetched by repository fetch plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeExperimentResponse'
+
+  /practice/solutions/projection/employees:
+    get:
+      tags: [05 DTO Projection]
+      summary: Read Employee and Department fields with DTO projection
+      description: Part 11.8. Selects only employeeId, employeeName, and departmentName; result is not a managed Entity and has no dirty checking.
+      operationId: employeeProjection
+      responses:
+        '200':
+          description: DTO projection result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeDepartmentViewExperimentResponse'
+
+  /practice/compare/one-to-many/nplus1:
+    get:
+      tags: [06 Compare]
+      summary: Compare OneToMany baseline
+      description: Part 11.1, 11.2, 11.3, and 11.5. Broken baseline for SQL BEFORE comparison.
+      operationId: compareOneToManyNPlusOne
+      responses:
+        '200':
+          description: Broken OneToMany baseline response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentExperimentResponse'
+
+  /practice/compare/one-to-many/fetch-join:
+    get:
+      tags: [06 Compare]
+      summary: Compare OneToMany fetch join
+      description: Part 11.6. Same logical Department + Employees response using JPQL fetch join.
+      operationId: compareOneToManyFetchJoin
+      responses:
+        '200':
+          description: OneToMany fetch join comparison response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentExperimentResponse'
+
+  /practice/compare/one-to-many/entity-graph:
+    get:
+      tags: [06 Compare]
+      summary: Compare OneToMany EntityGraph
+      description: Part 11.7. Same logical Department + Employees response using @EntityGraph.
+      operationId: compareOneToManyEntityGraph
+      responses:
+        '200':
+          description: OneToMany EntityGraph comparison response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentExperimentResponse'
+
+  /practice/compare/many-to-one/nplus1:
+    get:
+      tags: [06 Compare]
+      summary: Compare ManyToOne baseline
+      description: Part 11.4 and 11.5. Broken baseline for SQL BEFORE comparison.
+      operationId: compareManyToOneNPlusOne
+      responses:
+        '200':
+          description: Broken ManyToOne baseline response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeExperimentResponse'
+
+  /practice/compare/many-to-one/fetch-join:
+    get:
+      tags: [06 Compare]
+      summary: Compare ManyToOne fetch join
+      description: Part 11.6. Same logical Employee + Department response using JPQL fetch join.
+      operationId: compareManyToOneFetchJoin
+      responses:
+        '200':
+          description: ManyToOne fetch join comparison response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeExperimentResponse'
+
+  /practice/compare/many-to-one/entity-graph:
+    get:
+      tags: [06 Compare]
+      summary: Compare ManyToOne EntityGraph
+      description: Part 11.7. Same logical Employee + Department response using @EntityGraph.
+      operationId: compareManyToOneEntityGraph
+      responses:
+        '200':
+          description: ManyToOne EntityGraph comparison response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeExperimentResponse'
+
+  /practice/compare/projection:
+    get:
+      tags: [06 Compare]
+      summary: Compare DTO projection
+      description: Part 11.8. One read query selecting only required columns for the DTO.
+      operationId: compareProjection
+      responses:
+        '200':
+          description: DTO projection comparison response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeDepartmentViewExperimentResponse'
+
+  /practice/solutions/batch-fetching:
+    get:
+      tags: [07 Concepts]
+      summary: Explain batch fetching
+      description: Part 11.9. Concept-only in this lab so global batch fetching does not hide baseline N+1.
+      operationId: batchFetching
+      responses:
+        '200':
+          description: Batch fetching concept response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchFetchingExplanation'
+
+  /practice/eager-is-not-solution/employees/basic:
+    get:
+      tags: [07 Concepts]
+      summary: Explain why EAGER everywhere is not the solution
+      description: Part 11.10. Shows an employee basic-info use case that needs id, name, and email, but not Department details.
+      operationId: eagerIsNotSolution
+      responses:
+        '200':
+          description: Basic employee data plus reasons not to globally change mappings to EAGER
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EagerMisconceptionResponse'
+
+components:
+  responses:
+    BadRequest:
+      description: Request validation failed
+    NotFound:
+      description: Requested Department was not found
+
+  schemas:
+    CreateDepartmentRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          example: Bruno Engineering
+
+    CreateEmployeeRequest:
+      type: object
+      required: [name, email, salary, departmentId]
+      properties:
+        name:
+          type: string
+          example: Bruno Employee
+        email:
+          type: string
+          format: email
+          example: bruno.employee.p08@example.com
+        salary:
+          type: number
+          minimum: 0
+          example: 2500.00
+        departmentId:
+          type: integer
+          format: int64
+          example: 1
+
+    QueryExperimentResult:
+      type: object
+      required: [experiment, queryCount, rootEntityCount, explanation]
+      properties:
+        experiment:
+          type: string
+          example: OneToMany N+1 baseline
+        queryCount:
+          type: integer
+          format: int64
+          example: 4
+        rootEntityCount:
+          type: integer
+          format: int32
+          example: 3
+        explanation:
+          type: string
+          example: findAll() loads Departments first; accessing each LAZY employees collection in the loop can create one extra SELECT per Department.
+
+    DepartmentExperimentResponse:
+      type: object
+      required: [result, data]
+      properties:
+        result:
+          $ref: '#/components/schemas/QueryExperimentResult'
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DepartmentResponse'
+
+    EmployeeExperimentResponse:
+      type: object
+      required: [result, data]
+      properties:
+        result:
+          $ref: '#/components/schemas/QueryExperimentResult'
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmployeeResponse'
+
+    EmployeeDepartmentViewExperimentResponse:
+      type: object
+      required: [result, data]
+      properties:
+        result:
+          $ref: '#/components/schemas/QueryExperimentResult'
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmployeeDepartmentView'
+
+    DepartmentResponse:
+      type: object
+      required: [id, name, employees]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        name:
+          type: string
+          example: Department A
+        employees:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmployeeSummary'
+
+    EmployeeSummary:
+      type: object
+      required: [id, name, email]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        name:
+          type: string
+          example: Employee A1
+        email:
+          type: string
+          format: email
+          example: a1@example.com
+
+    EmployeeResponse:
+      type: object
+      required: [id, name, email, departmentId, departmentName]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        name:
+          type: string
+          example: Employee A1
+        email:
+          type: string
+          format: email
+          example: a1@example.com
+        departmentId:
+          type: integer
+          format: int64
+          example: 1
+        departmentName:
+          type: string
+          example: Department A
+
+    EmployeeDepartmentView:
+      type: object
+      required: [employeeId, employeeName, departmentName]
+      properties:
+        employeeId:
+          type: integer
+          format: int64
+          example: 1
+        employeeName:
+          type: string
+          example: Employee A1
+        departmentName:
+          type: string
+          example: Department A
+
+    BatchFetchingExplanation:
+      type: object
+      required: [concept, withoutBatching, withBatching, explanation, labStatus]
+      properties:
+        concept:
+          type: string
+          example: Hibernate batch fetching
+        withoutBatching:
+          type: array
+          items:
+            type: string
+          example:
+            - SELECT employees WHERE department_id = 1
+            - SELECT employees WHERE department_id = 2
+            - SELECT employees WHERE department_id = 3
+        withBatching:
+          type: array
+          items:
+            type: string
+          example:
+            - SELECT employees WHERE department_id IN (?, ?, ?)
+        explanation:
+          type: string
+          example: Batch fetching keeps relationships lazy, but Hibernate can initialize several lazy relationships in groups.
+        labStatus:
+          type: string
+          example: Documentation-only in this lab so the baseline N+1 endpoints remain visibly broken.
+
+    EagerMisconceptionResponse:
+      type: object
+      required: [useCase, neededFields, notNeeded, whyEagerEverywhereIsWasteful, data]
+      properties:
+        useCase:
+          type: string
+          example: GET employee basic info
+        neededFields:
+          type: array
+          items:
+            type: string
+          example: [id, name, email]
+        notNeeded:
+          type: array
+          items:
+            type: string
+          example: [Department details]
+        whyEagerEverywhereIsWasteful:
+          type: array
+          items:
+            type: string
+          example:
+            - unrelated use cases load unnecessary relationships
+            - query behavior becomes harder to control
+            - memory and data transfer can increase
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmployeeBasicResponse'
+
+    EmployeeBasicResponse:
+      type: object
+      required: [id, name, email]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        name:
+          type: string
+          example: Employee A1
+        email:
+          type: string
+          format: email
+          example: a1@example.com
