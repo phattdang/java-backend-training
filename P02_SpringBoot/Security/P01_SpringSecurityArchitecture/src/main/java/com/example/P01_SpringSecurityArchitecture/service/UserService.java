@@ -5,6 +5,6 @@ import com.example.P01_SpringSecurityArchitecture.dto.response.UserResponse;
 import com.example.P01_SpringSecurityArchitecture.entity.User;
 
 public interface UserService {
-    User create(UserCreationRequest request);
+    UserResponse create(UserCreationRequest request);
     UserResponse me();
 }

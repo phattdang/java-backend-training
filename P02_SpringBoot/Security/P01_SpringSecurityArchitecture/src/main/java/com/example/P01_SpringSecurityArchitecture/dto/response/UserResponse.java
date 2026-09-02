@@ -4,25 +4,16 @@ import com.example.P01_SpringSecurityArchitecture.entity.enums.Role;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import lombok.AccessLevel;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 import lombok.experimental.FieldDefaults;
 
+@AllArgsConstructor
 @NoArgsConstructor
 @Getter
-@Setter
 @FieldDefaults(level = AccessLevel.PRIVATE)
+@Builder
 public class UserResponse {
-
-    @Email
-    @NotBlank
+    Long id;
     String email;
-
-    @NotBlank
-    String password;
-
-    @NotNull
     Role role;
 }

@@ -1,5 +1,6 @@
 package com.example.P01_SpringSecurityArchitecture.controller;
 
+import com.example.P01_SpringSecurityArchitecture.dto.request.LoginRequest;
 import com.example.P01_SpringSecurityArchitecture.dto.request.UserCreationRequest;
 import com.example.P01_SpringSecurityArchitecture.service.UserService;
 import jakarta.validation.Valid;
